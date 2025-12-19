@@ -91,25 +91,8 @@ import '../styles/global.css';
 				<!-- Preview -->
 				<div class="lg:col-span-2 flex flex-col gap-4">
 					<div class="flex items-center justify-center bg-gray-50 p-4 rounded-lg border border-gray-200">
-						<div id="voucher-preview" class="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-300 bg-cover bg-center shadow-xl" style="background-image: url('https://placehold.co/800x450?text=Upload+Background');">
-							<div class="absolute inset-0 flex items-center justify-center p-8">
-								<div class="backdrop-blur-sm bg-white/30 border border-white/20 shadow-sm rounded-xl p-8 w-full max-w-lg text-center flex flex-col gap-4">
-									<h2 id="display-title" class="text-4xl font-bold text-gray-900 drop-shadow-sm">Gift Voucher</h2>
-									<p id="display-subtitle" class="text-xl font-medium text-gray-800 drop-shadow-sm">A special treat just for you</p>
-									
-									<div class="my-4 w-1/2 mx-auto border-t border-gray-800/20"></div>
-									
-									<p id="display-address" class="whitespace-pre-line text-gray-800">123 Main St,
-	Cityville, ST 12345</p>
-									
-									<p class="text-sm mt-2 font-semibold text-gray-700">
-										Valid until: <span id="display-valid-till">December 31, 2025</span>
-									</p>
-									<p class="text-xs mt-1 font-mono text-gray-600 tracking-wider">
-										Code: <span id="display-code"></span>
-									</p>
-								</div>
-							</div>
+						<div id="voucher-preview" class="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-300 shadow-xl flex items-center justify-center">
+							<p class="text-gray-500">Loading Preview...</p>
 						</div>
 					</div>
 					<p class="text-sm text-gray-500 text-center italic">Preview may differ slightly from downloaded image.</p>
@@ -118,11 +101,11 @@ import '../styles/global.css';
 		</main>
 
 		<script>
-			import html2canvas from 'html2canvas-pro';
+			import * as PIXI from 'pixi.js';
 
 			// Elements
 			const bgUpload = document.getElementById('bg-upload') as HTMLInputElement;
-			const preview = document.getElementById('voucher-preview');
+			const previewContainer = document.getElementById('voucher-preview');
 			const downloadBtn = document.getElementById('download-btn');
 			const regenerateCodeBtn = document.getElementById('regenerate-code-btn');
 			
@@ -133,85 +116,211 @@ import '../styles/global.css';
 				validTill: document.getElementById('input-valid-till') as HTMLInputElement,
 			};
 
-			const displays = {
-				title: document.getElementById('display-title'),
-				subtitle: document.getElementById('display-subtitle'),
-				address: document.getElementById('display-address'),
-				validTill: document.getElementById('display-valid-till'),
-				code: document.getElementById('display-code'),
-			};
+			// PixiJS App
+			const app = new PIXI.Application();
+			
+			// State
+			let backgroundTexture: PIXI.Texture | null = null;
+			let voucherCode = 'XXXXXX';
 
-			const EXPORT_BLUR_RADIUS = 14;
-
-			function extractBackgroundUrl(element: HTMLElement) {
-				const backgroundImage = window.getComputedStyle(element).backgroundImage;
-				const match = backgroundImage.match(/url\(["']?(.*?)["']?\)/);
-				return match && match[1] !== 'none' ? match[1] : null;
-			}
-
-			function loadImage(src: string) {
-				return new Promise<HTMLImageElement>((resolve, reject) => {
-					const image = new Image();
-					image.crossOrigin = 'anonymous';
-					image.onload = () => resolve(image);
-					image.onerror = reject;
-					image.src = src;
+			async function initPixi() {
+				await app.init({ 
+					width: 800, 
+					height: 450, 
+					backgroundColor: 0xcccccc,
+					preserveDrawingBuffer: true, // Important for download
+					resolution: 3, // Set export resolution (3x = 2400x1350)
 				});
-			}
-
-			function drawImageCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number) {
-				const scale = Math.max(width / image.width, height / image.height);
-				const drawWidth = image.width * scale;
-				const drawHeight = image.height * scale;
-				const offsetX = (width - drawWidth) / 2;
-				const offsetY = (height - drawHeight) / 2;
-				ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-			}
-
-			async function generateBlurredBackground(element: HTMLElement, blurRadius = EXPORT_BLUR_RADIUS) {
-				const imageUrl = extractBackgroundUrl(element);
-				if (!imageUrl) {
-					return null;
+				
+				// Clear existing content and append canvas
+				if (previewContainer) {
+					previewContainer.innerHTML = '';
+					previewContainer.appendChild(app.canvas);
+					// Make canvas responsive
+					app.canvas.style.width = '100%';
+					app.canvas.style.height = 'auto';
 				}
 
+				// Load initial placeholder background
 				try {
-					const image = await loadImage(imageUrl);
-					const width = element.clientWidth || element.getBoundingClientRect().width || 800;
-					const height = element.clientHeight || element.getBoundingClientRect().height || 450;
-					const canvas = document.createElement('canvas');
-					canvas.width = Math.max(1, Math.floor(width));
-					canvas.height = Math.max(1, Math.floor(height));
-					const ctx = canvas.getContext('2d');
-					if (!ctx) {
-						return null;
+					backgroundTexture = await PIXI.Assets.load('https://placehold.co/800x450.png?text=Upload+Background');
+					// Ensure texture is properly configured
+					if (backgroundTexture) {
+						backgroundTexture.source.alphaMode = 'no-premultiply';
 					}
-
-					ctx.filter = `blur(${blurRadius}px)`;
-					drawImageCover(ctx, image, canvas.width, canvas.height);
-					return canvas.toDataURL('image/png');
-				} catch (error) {
-					console.warn('Unable to generate blurred background for export:', error);
-					return null;
-				}
-			}
-
-			async function applyBlurredBackgroundForExport(element: HTMLElement) {
-				const blurredBackground = await generateBlurredBackground(element);
-				const originalBackground = element.style.backgroundImage;
-
-				if (!blurredBackground) {
-					return () => {};
+				} catch (e) {
+					console.error("Failed to load placeholder", e);
 				}
 
-				element.style.backgroundImage = `url(${blurredBackground})`;
-				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-				return () => {
-					element.style.backgroundImage = originalBackground;
-				};
+				render();
 			}
 
-			// Generate random 6-character code
+			function render() {
+				app.stage.removeChildren();
+
+				const width = app.screen.width;
+				const height = app.screen.height;
+
+				// 0. Base Background
+				const baseBg = new PIXI.Graphics();
+				baseBg.rect(0, 0, width, height);
+				baseBg.fill({ color: 0xcccccc });
+				app.stage.addChild(baseBg);
+
+				// 1. Background
+				if (backgroundTexture) {
+					const bgSprite = new PIXI.Sprite(backgroundTexture);
+					bgSprite.anchor.set(0.5);
+					bgSprite.x = width / 2;
+					bgSprite.y = height / 2;
+
+					// Cover logic
+					const scale = Math.max(width / bgSprite.width, height / bgSprite.height);
+					bgSprite.scale.set(scale);
+					
+					app.stage.addChild(bgSprite);
+				}
+
+				// 2. Card Container
+				const card = new PIXI.Container();
+				
+				// Card Background (Glass effect simulation)
+				const cardBg = new PIXI.Graphics();
+				const cardWidth = 500;
+				const cardHeight = 350; // Approximate, will adjust based on content if needed
+				
+				cardBg.roundRect(-cardWidth/2, -cardHeight/2, cardWidth, cardHeight, 20);
+				cardBg.fill({ color: 0xffffff, alpha: 0.85 }); // Increased opacity for readability since we don't have backdrop blur easily
+				cardBg.stroke({ width: 1, color: 0xffffff, alpha: 0.4 });
+				
+				card.addChild(cardBg);
+
+				// Text Styles
+				const titleStyle = new PIXI.TextStyle({
+					fontFamily: 'Manrope',
+					fontSize: 36,
+					fontWeight: 'bold',
+					fill: '#111827', // gray-900
+					align: 'center',
+					wordWrap: true,
+					wordWrapWidth: cardWidth - 60
+				});
+
+				const subtitleStyle = new PIXI.TextStyle({
+					fontFamily: 'Manrope',
+					fontSize: 20,
+					fontWeight: '500',
+					fill: '#1f2937', // gray-800
+					align: 'center',
+					wordWrap: true,
+					wordWrapWidth: cardWidth - 60
+				});
+
+				const addressStyle = new PIXI.TextStyle({
+					fontFamily: 'Manrope',
+					fontSize: 16,
+					fill: '#1f2937', // gray-800
+					align: 'center',
+					wordWrap: true,
+					wordWrapWidth: cardWidth - 60
+				});
+
+				const labelStyle = new PIXI.TextStyle({
+					fontFamily: 'Manrope',
+					fontSize: 14,
+					fontWeight: '600',
+					fill: '#374151', // gray-700
+					align: 'center'
+				});
+
+				const codeStyle = new PIXI.TextStyle({
+					fontFamily: 'monospace',
+					fontSize: 12,
+					fill: '#4b5563', // gray-600
+					letterSpacing: 2,
+					align: 'center'
+				});
+
+				// Content Layout
+				let currentY = -cardHeight/2 + 40;
+
+				// Title
+				const titleText = new PIXI.Text({ text: inputs.title.value, style: titleStyle });
+				titleText.anchor.set(0.5, 0);
+				titleText.x = 0;
+				titleText.y = currentY;
+				card.addChild(titleText);
+				currentY += titleText.height + 10;
+
+				// Subtitle
+				const subtitleText = new PIXI.Text({ text: inputs.subtitle.value, style: subtitleStyle });
+				subtitleText.anchor.set(0.5, 0);
+				subtitleText.x = 0;
+				subtitleText.y = currentY;
+				card.addChild(subtitleText);
+				currentY += subtitleText.height + 20;
+
+				// Divider
+				const divider = new PIXI.Graphics();
+				divider.moveTo(-100, 0);
+				divider.lineTo(100, 0);
+				divider.stroke({ width: 1, color: 0x1f2937, alpha: 0.2 });
+				divider.y = currentY;
+				card.addChild(divider);
+				currentY += 20;
+
+				// Address
+				const addressText = new PIXI.Text({ text: inputs.address.value, style: addressStyle });
+				addressText.anchor.set(0.5, 0);
+				addressText.x = 0;
+				addressText.y = currentY;
+				card.addChild(addressText);
+				currentY += addressText.height + 20;
+
+				// Valid Till
+				const validText = new PIXI.Text({ text: `Valid until: ${inputs.validTill.value}`, style: labelStyle });
+				validText.anchor.set(0.5, 0);
+				validText.x = 0;
+				validText.y = currentY;
+				card.addChild(validText);
+				currentY += validText.height + 10;
+
+				// Code
+				const codeText = new PIXI.Text({ text: `Code: ${voucherCode}`, style: codeStyle });
+				codeText.anchor.set(0.5, 0);
+				codeText.x = 0;
+				codeText.y = currentY;
+				card.addChild(codeText);
+
+				// Center Card
+				card.x = width / 2;
+				card.y = height / 2;
+				app.stage.addChild(card);
+			}
+
+			// Event Listeners
+			Object.values(inputs).forEach(input => {
+				input.addEventListener('input', render);
+			});
+
+			bgUpload.addEventListener('change', async (e) => {
+				const target = e.target as HTMLInputElement;
+				if (target.files && target.files[0]) {
+					const reader = new FileReader();
+					reader.onload = async (e) => {
+						if (e.target?.result) {
+							backgroundTexture = await PIXI.Assets.load(e.target.result as string);
+							// Ensure texture is properly configured to prevent WebGL warnings
+							if (backgroundTexture) {
+								backgroundTexture.source.alphaMode = 'no-premultiply';
+							}
+							render();
+						}
+					};
+					reader.readAsDataURL(target.files[0]);
+				}
+			});
+
 			function generateCode() {
 				const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 				let code = '';
@@ -221,92 +330,28 @@ import '../styles/global.css';
 				return code;
 			}
 
-			// Set initial code
-			if (displays.code) {
-				displays.code.textContent = generateCode();
-			}
-
-			// Text Updates
-			Object.keys(inputs).forEach(key => {
-				const input = inputs[key as keyof typeof inputs];
-				const display = displays[key as keyof typeof displays];
-				
-				if (input && display) {
-					input.addEventListener('input', (e) => {
-						const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-						display.textContent = target.value;
-					});
-				}
+			regenerateCodeBtn?.addEventListener('click', () => {
+				voucherCode = generateCode();
+				render();
 			});
 
-			// Background Upload
-			if (bgUpload && preview) {
-				bgUpload.addEventListener('change', (e) => {
-					const target = e.target as HTMLInputElement;
-					if (target.files && target.files[0]) {
-						const reader = new FileReader();
-						reader.onload = (e) => {
-							if (e.target?.result) {
-								preview.style.backgroundImage = `url(${e.target.result})`;
-							}
-						};
-						reader.readAsDataURL(target.files[0]);
-					}
-				});
-			}
+			downloadBtn?.addEventListener('click', async () => {
+				// Regenerate code if needed (optional, but keeping consistent with old logic)
+				voucherCode = generateCode();
+				render();
 
-			// Regenerate Code Button
-			if (regenerateCodeBtn && displays.code) {
-				regenerateCodeBtn.addEventListener('click', () => {
-					if (displays.code) {
-						displays.code.textContent = generateCode();
-					}
-				});
-			}
+				// Wait for next frame to ensure render
+				app.render();
+				
+				const link = document.createElement('a');
+				link.download = `voucher_${voucherCode}.png`;
+				link.href = (app.canvas as HTMLCanvasElement).toDataURL('image/png');
+				link.click();
+			});
 
-			// Download Functionality
-			if (downloadBtn && preview) {
-				downloadBtn.addEventListener('click', async () => {
-					const button = downloadBtn as HTMLButtonElement;
-					const originalText = downloadBtn.innerHTML;
-					let restoreBackground = () => {};
-
-					try {
-						// Regenerate code for new voucher
-						if (displays.code) {
-							displays.code.textContent = generateCode();
-						}
-
-						downloadBtn.innerHTML = 'Generating...';
-						button.disabled = true;
-
-						restoreBackground = await applyBlurredBackgroundForExport(preview as HTMLElement);
-
-						const canvas = await html2canvas(preview as HTMLElement, {
-							useCORS: true,
-							scale: 2,
-							backgroundColor: null,
-							ignoreElements: (element) => {
-								// Skip custom elements and shadow DOM components
-								return element.tagName.includes('-');
-							}
-						});
-
-						const voucherCode = displays.code?.textContent || 'XXXXXX';
-						const link = document.createElement('a');
-						link.download = `voucher_${voucherCode}.png`;
-						link.href = canvas.toDataURL('image/png');
-						link.click();
-					} catch (err) {
-						console.error('Error generating voucher:', err);
-						alert('Failed to generate voucher image.');
-					} finally {
-						restoreBackground();
-						downloadBtn.innerHTML = originalText;
-						button.disabled = false;
-					}
-				});
-			}
+			// Initialize
+			voucherCode = generateCode();
+			initPixi();
 		</script>
 	</body>
 </html>

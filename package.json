@@ -11,7 +11,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "astro": "^5.16.6",
-    "html2canvas-pro": "^1.6.1",
+    "pixi.js": "^8.14.3",
     "sharp": "^0.34.3",
     "tailwindcss": "^4.1.18"
   }
