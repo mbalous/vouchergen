@@ -72,6 +72,18 @@ import '../styles/global.css';
 						/>
 					</div>
 
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">Background Blur</label>
+						<input 
+							type="range" 
+							id="input-blur" 
+							min="0" 
+							max="20" 
+							value="0"
+							class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+						/>
+					</div>
+
 				<div class="pt-4 space-y-2">
 					<button 
 						id="regenerate-code-btn"
@@ -114,6 +126,7 @@ import '../styles/global.css';
 				subtitle: document.getElementById('input-subtitle') as HTMLInputElement,
 				address: document.getElementById('input-address') as HTMLTextAreaElement,
 				validTill: document.getElementById('input-valid-till') as HTMLInputElement,
+				blur: document.getElementById('input-blur') as HTMLInputElement,
 			};
 
 			// PixiJS App
@@ -177,6 +190,14 @@ import '../styles/global.css';
 					// Cover logic
 					const scale = Math.max(width / bgSprite.width, height / bgSprite.height);
 					bgSprite.scale.set(scale);
+
+					// Apply Blur
+					const blurStrength = parseInt(inputs.blur.value, 10);
+					if (blurStrength > 0) {
+						const blurFilter = new PIXI.BlurFilter();
+						blurFilter.strength = blurStrength;
+						bgSprite.filters = [blurFilter];
+					}
 					
 					app.stage.addChild(bgSprite);
 				}
